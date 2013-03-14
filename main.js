@@ -91,18 +91,62 @@ var annotate$Angular = function(syntax) {
     });
 }
 
+var annotateFuncAngular = function (syntax) {
+	var offset = 0;
+	for(var i = 0, l = syntax.body.length; i < l; i++) {
+		var chunk = syntax.body[i+offset];
+        if (chunk.type=="FunctionDeclaration" && chunk.id) {
+			var name = chunk.id.name;
+			var inject = {
+			   "type": "ExpressionStatement",
+			   "expression": {
+			      "type": "AssignmentExpression",
+			      "operator": "=",
+			      "left": {
+			         "type": "MemberExpression",
+			         "computed": false,
+			         "object": {
+			            "type": "Identifier",
+			            "name": name
+			         },
+			         "property": {
+			            "type": "Identifier",
+			            "name": "$inject"
+			         }
+			      },
+			      "right": {
+			         "type": "ArrayExpression",
+			         "elements": []
+			      }
+			   }
+			};
+			
+            var newParam = inject.expression.right;
+            chunk.params.forEach(function (param) {
+                newParam.elements.push({
+                    "type": "Literal",
+                    "value": param.name
+                });
+            });
+			syntax.body.splice(i+offset+1, 0, inject);
+			offset++;
+        }
+	}
+};
+
 /*
  * Given a JavaScript string, annotate the injectable AngularJS module methods
  */
 var annotate = exports.annotate = function (inputCode) {
     //inputCode = "$angular.foo.bar.services.NAME = function(foo, bar){}";
-    //inputCode = "angular.module('foo.bar').METHOD(function(foo, bar){})";
+    //inputCode = "function FUNC(foo,bar) {} angular.module('foo.bar').METHOD1(FUNC)";
     var syntax = esprima.parse(inputCode, {
         tolerant: true
     });
-
+    //console.log(JSON.stringify(syntax.body[0], null , "   ")+"\n");
     annotate$Angular(syntax);
     annotateAngularModule(syntax);
+    annotateFuncAngular(syntax);
 
     var generatedCode = escodegen.generate(syntax, {
         format: {
